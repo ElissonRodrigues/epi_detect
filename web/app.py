@@ -4,6 +4,7 @@ Flask application para monitoramento de EPIs em tempo real via WebSocket.
 
 # Monkey patching DEVE vir primeiro
 import eventlet
+
 eventlet.monkey_patch()
 
 import base64
@@ -31,9 +32,7 @@ detector: EPIDetector | None = None
 
 def get_model_path() -> str | None:
     """Retorna o caminho do modelo EPI se existir."""
-    model_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "modelo_epi.pth"
-    )
+    model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "modelo_epi.pth")
     return model_path if os.path.exists(model_path) else None
 
 
@@ -65,9 +64,9 @@ def handle_frame(data):
         data: Dict com 'image' contendo a imagem em base64
     """
     global detector
-    
+
     start_time = time.time()
-    print(f"Frame recebido - tamanho: {len(str(data.get('image', '')))}")
+    #print(f"Frame recebido - tamanho: {len(str(data.get('image', '')))}")
 
     if detector is None:
         emit("error", {"message": "Detector não inicializado"})
@@ -100,34 +99,26 @@ def handle_frame(data):
         # Preparar resposta com detecções e status
         response = {
             "image": f"data:image/jpeg;base64,{annotated_base64}",
-            "detections": [
-                {"box": box.tolist(), "label": label, "score": score}
-                for box, label, score in results
-            ],
+            "detections": [{"box": box.tolist(), "label": label, "score": score} for box, label, score in results],
             "epi_status": epi_status,
             "total_persons": len(epi_status),
-            "compliant": sum(
-                1
-                for s in epi_status
-                if s["helmet"] and s["vest"] and s["gloves"]
-            ),
+            "compliant": sum(1 for s in epi_status if s["helmet"] and s["vest"] and s["gloves"]),
             "timestamp": data.get("timestamp"),
         }
 
         elapsed = time.time() - start_time
-        print(f"Frame processado em {elapsed*1000:.0f}ms - {len(results)} detecções")
+        #print(f"Frame processado em {elapsed*1000:.0f}ms - {len(results)} detecções")
         emit("result", response)
 
     except Exception as e:
         import traceback
+
         print(f"Erro ao processar frame: {e}")
         traceback.print_exc()
         emit("error", {"message": str(e)})
 
 
-def draw_detections(
-    frame: np.ndarray, results: list[tuple], epi_status: list[dict]
-) -> np.ndarray:
+def draw_detections(frame: np.ndarray, results: list[tuple], epi_status: list[dict]) -> np.ndarray:
     """Desenha detecções e status no frame."""
     annotated = frame.copy()
 
@@ -136,12 +127,12 @@ def draw_detections(
 
     # Cores para cada tipo
     colors = {
-        "person_ok": (0, 200, 0),      # Verde - todos EPIs
+        "person_ok": (0, 200, 0),  # Verde - todos EPIs
         "person_partial": (0, 200, 255),  # Laranja - alguns EPIs
-        "person_none": (0, 0, 255),    # Vermelho - sem EPIs
-        "helmet": (255, 200, 0),       # Azul claro
-        "vest": (255, 100, 200),       # Rosa
-        "gloves": (100, 255, 200),     # Ciano
+        "person_none": (0, 0, 255),  # Vermelho - sem EPIs
+        "helmet": (255, 200, 0),  # Azul claro
+        "vest": (255, 100, 200),  # Rosa
+        "gloves": (100, 255, 200),  # Ciano
     }
 
     for idx, (box, label, score) in enumerate(results):
@@ -169,28 +160,25 @@ def draw_detections(
                 status = person_status_map[idx]
                 missing = []
                 if not status["helmet"]:
-                    missing.append("🪖")
+                    missing.append("Capacete")
                 if not status["vest"]:
-                    missing.append("🦺")
+                    missing.append("Colete")
                 if not status["gloves"]:
-                    missing.append("🧤")
+                    missing.append("Luvas")
 
                 if missing:
-                    status_text = f"Falta: {' '.join(missing)}"
+                    status_text = f"Falta: {', '.join(missing)}"
                 else:
                     status_text = "OK - Todos EPIs"
 
-                # Background para texto
-                (tw, th), _ = cv2.getTextSize(
-                    status_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
-                )
-                cv2.rectangle(
-                    annotated, (x1, y2 + 5), (x1 + tw + 10, y2 + th + 15), color, -1
-                )
+                # Background para texto (acima da pessoa)
+                (tw, th), _ = cv2.getTextSize(status_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+                text_y = y1 - 10 if y1 > th + 15 else y1 + th + 25  # Se não couber em cima, coloca embaixo
+                cv2.rectangle(annotated, (x1, text_y - th - 5), (x1 + tw + 10, text_y + 5), color, -1)
                 cv2.putText(
                     annotated,
                     status_text,
-                    (x1 + 5, y2 + th + 10),
+                    (x1 + 5, text_y),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.6,
                     (255, 255, 255),
