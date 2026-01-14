@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor de EPIs - Tempo Real</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-icon">🛡️</span>
+                    <h1>EPI Monitor</h1>
+                </div>
+                <div class="connection-status" id="connectionStatus">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Desconectado</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Video Panel -->
+            <section class="video-panel">
+                <div class="video-container">
+                    <!-- Elemento de vídeo oculto para captura -->
+                    <video id="videoElement" autoplay playsinline muted></video>
+                    
+                    <!-- Canvas para exibir frames processados -->
+                    <canvas id="outputCanvas"></canvas>
+                    
+                    <!-- Overlay para mensagens -->
+                    <div class="video-overlay" id="videoOverlay">
+                        <div class="overlay-content">
+                            <span class="overlay-icon">📹</span>
+                            <p>Clique para iniciar a câmera</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Controls -->
+                <div class="video-controls">
+                    <button id="startBtn" class="btn btn-primary">
+                        <span class="btn-icon">▶️</span>
+                        Iniciar Monitoramento
+                    </button>
+                    <button id="stopBtn" class="btn btn-danger" disabled>
+                        <span class="btn-icon">⏹️</span>
+                        Parar
+                    </button>
+                    <select id="cameraSelect" class="camera-select">
+                        <option value="">Selecione a câmera...</option>
+                    </select>
+                </div>
+            </section>
+
+            <!-- Stats Panel -->
+            <aside class="stats-panel">
+                <div class="stats-card">
+                    <h2>📊 Status em Tempo Real</h2>
+                    
+                    <div class="stat-item">
+                        <div class="stat-label">Pessoas Detectadas</div>
+                        <div class="stat-value" id="personCount">0</div>
+                    </div>
+                    
+                    <div class="stat-item compliant">
+                        <div class="stat-label">✅ Em Conformidade</div>
+                        <div class="stat-value" id="compliantCount">0</div>
+                    </div>
+                    
+                    <div class="stat-item non-compliant">
+                        <div class="stat-label">⚠️ Sem EPIs Completos</div>
+                        <div class="stat-value" id="nonCompliantCount">0</div>
+                    </div>
+                </div>
+
+                <!-- EPI Legend -->
+                <div class="legend-card">
+                    <h3>🎨 Legenda</h3>
+                    <ul class="legend-list">
+                        <li>
+                            <span class="legend-color" style="background: #00c800;"></span>
+                            Todos os EPIs
+                        </li>
+                        <li>
+                            <span class="legend-color" style="background: #ffc800;"></span>
+                            EPIs Parciais
+                        </li>
+                        <li>
+                            <span class="legend-color" style="background: #ff0000;"></span>
+                            Sem EPIs
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Performance Stats -->
+                <div class="performance-card">
+                    <h3>⚡ Performance</h3>
+                    <div class="perf-item">
+                        <span>FPS:</span>
+                        <span id="fpsValue">0</span>
+                    </div>
+                    <div class="perf-item">
+                        <span>Latência:</span>
+                        <span id="latencyValue">0ms</span>
+                    </div>
+                </div>
+
+                <!-- Person Details -->
+                <div class="details-card">
+                    <h3>👥 Detalhes por Pessoa</h3>
+                    <div id="personDetails" class="person-list">
+                        <p class="no-detections">Nenhuma pessoa detectada</p>
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Sistema de Monitoramento de EPIs em Tempo Real | Powered by AI 🤖</p>
+        </footer>
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
