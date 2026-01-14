@@ -52,9 +52,6 @@ logs/
 .DS_Store
 Thumbs.db
 
-# UV
-uv.lock
-
 # Testing
 .pytest_cache/
 .coverage
