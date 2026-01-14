@@ -14,6 +14,10 @@ class EPIMonitor {
         this.cameraSelect = document.getElementById('cameraSelect');
         this.connectionStatus = document.getElementById('connectionStatus');
         
+        // Modal
+        this.connectionModal = document.getElementById('connectionModal');
+        this.reconnectStatus = this.connectionModal.querySelector('.reconnect-status');
+        
         // Stats elements
         this.personCount = document.getElementById('personCount');
         this.compliantCount = document.getElementById('compliantCount');
@@ -56,18 +60,28 @@ class EPIMonitor {
         this.socket = io({
             transports: ['websocket'],
             reconnection: true,
-            reconnectionAttempts: 5,
+            reconnectionAttempts: 10,
             reconnectionDelay: 1000
         });
         
         this.socket.on('connect', () => {
             console.log('Connected to server');
             this.updateConnectionStatus(true);
+            this.pendingFrame = false; // Reset pending state on reconnect
+            this.connectionModal.classList.add('hidden');
         });
         
         this.socket.on('disconnect', () => {
             console.log('Disconnected from server');
             this.updateConnectionStatus(false);
+            this.connectionModal.classList.remove('hidden');
+            this.reconnectStatus.textContent = "Aguardando reconexão...";
+        });
+
+        this.socket.io.on("reconnect_attempt", (attempt) => {
+            const text = this.connectionStatus.querySelector('.status-text');
+            text.textContent = `Tentando reconectar... (${attempt})`;
+            this.reconnectStatus.textContent = `Tentativa de reconexão: ${attempt}...`;
         });
         
         this.socket.on('status', (data) => {
@@ -89,9 +103,13 @@ class EPIMonitor {
         
         if (connected) {
             dot.classList.add('connected');
+            dot.style.background = 'var(--success)';
+            dot.style.boxShadow = 'var(--glow-success)';
             text.textContent = 'Conectado';
         } else {
             dot.classList.remove('connected');
+            dot.style.background = 'var(--danger)';
+            dot.style.boxShadow = 'var(--glow-danger)';
             text.textContent = 'Desconectado';
         }
     }
@@ -128,6 +146,13 @@ class EPIMonitor {
         
         try {
             console.log('Starting camera...');
+            
+            // Reset stats first
+            this.personCount.textContent = '0';
+            this.compliantCount.textContent = '0';
+            this.nonCompliantCount.textContent = '0';
+            this.fpsValue.textContent = '0';
+            this.personDetails.innerHTML = '<p class="no-detections">Aguardando detecção...</p>';
             
             const constraints = {
                 video: {
@@ -224,6 +249,9 @@ class EPIMonitor {
     
     handleResult(data) {
         this.pendingFrame = false;
+        
+        // Ignore results if stopped
+        if (!this.isRunning) return;
         
         // Update FPS
         this.frameCount++;
