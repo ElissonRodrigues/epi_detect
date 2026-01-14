@@ -276,43 +276,24 @@ class EPIMonitor {
             const hasGloves = status.gloves;
             const epiCount = [hasHelmet, hasVest, hasGloves].filter(Boolean).length;
             
-            let itemClass = 'person-item';
-            let statusIcon = '';
+            let itemClass = 'person-row';
             if (epiCount === 3) {
                 itemClass += ' success';
-                statusIcon = '✅';
             } else if (epiCount > 0) {
                 itemClass += ' warning';
-                statusIcon = '⚠️';
             } else {
                 itemClass += ' danger';
-                statusIcon = '❌';
             }
             
             html += `
                 <div class="${itemClass}">
-                    <div class="person-header">
-                        <span class="person-status-icon">${statusIcon}</span>
-                        <span class="person-name">Pessoa ${index + 1}</span>
-                        <span class="epi-count">${epiCount}/3</span>
+                    <span class="person-name">Pessoa ${index + 1}</span>
+                    <div class="epi-icons">
+                        <span class="${hasHelmet ? 'has' : 'missing'}" title="Capacete">🪖</span>
+                        <span class="${hasVest ? 'has' : 'missing'}" title="Colete">🦺</span>
+                        <span class="${hasGloves ? 'has' : 'missing'}" title="Luvas">🧤</span>
                     </div>
-                    <div class="person-epi-list">
-                        <div class="epi-item ${hasHelmet ? 'has-epi' : 'missing-epi'}">
-                            <span class="epi-icon">🪖</span>
-                            <span class="epi-label">Capacete</span>
-                            <span class="epi-status">${hasHelmet ? '✓' : '✗'}</span>
-                        </div>
-                        <div class="epi-item ${hasVest ? 'has-epi' : 'missing-epi'}">
-                            <span class="epi-icon">🦺</span>
-                            <span class="epi-label">Colete</span>
-                            <span class="epi-status">${hasVest ? '✓' : '✗'}</span>
-                        </div>
-                        <div class="epi-item ${hasGloves ? 'has-epi' : 'missing-epi'}">
-                            <span class="epi-icon">🧤</span>
-                            <span class="epi-label">Luvas</span>
-                            <span class="epi-status">${hasGloves ? '✓' : '✗'}</span>
-                        </div>
-                    </div>
+                    <span class="epi-badge">${epiCount}/3</span>
                 </div>
             `;
         });
@@ -321,7 +302,161 @@ class EPIMonitor {
     }
 }
 
+// Toggle card collapse/expand
+function toggleCard(headerElement) {
+    const card = headerElement.closest('.collapsible-card');
+    const content = card.querySelector('.card-content');
+    const icon = headerElement.querySelector('.toggle-icon');
+    
+    content.classList.toggle('collapsed');
+    
+    if (content.classList.contains('collapsed')) {
+        icon.style.transform = 'rotate(-90deg)';
+    } else {
+        icon.style.transform = 'rotate(0deg)';
+    }
+    
+    // Save state to localStorage
+    saveCardStates();
+}
+
+// Drag and Drop functionality
+let draggedCard = null;
+
+function initDragAndDrop() {
+    const statsPanel = document.getElementById('statsPanel');
+    const cards = statsPanel.querySelectorAll('.collapsible-card');
+    
+    cards.forEach(card => {
+        // Drag start
+        card.addEventListener('dragstart', (e) => {
+            draggedCard = card;
+            card.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        });
+        
+        // Drag end
+        card.addEventListener('dragend', () => {
+            card.classList.remove('dragging');
+            draggedCard = null;
+            
+            // Remove all drag-over classes
+            cards.forEach(c => c.classList.remove('drag-over'));
+            
+            // Save order to localStorage
+            saveCardOrder();
+        });
+        
+        // Drag over
+        card.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            
+            if (draggedCard && draggedCard !== card) {
+                card.classList.add('drag-over');
+            }
+        });
+        
+        // Drag leave
+        card.addEventListener('dragleave', () => {
+            card.classList.remove('drag-over');
+        });
+        
+        // Drop
+        card.addEventListener('drop', (e) => {
+            e.preventDefault();
+            card.classList.remove('drag-over');
+            
+            if (draggedCard && draggedCard !== card) {
+                const allCards = [...statsPanel.querySelectorAll('.collapsible-card')];
+                const draggedIndex = allCards.indexOf(draggedCard);
+                const dropIndex = allCards.indexOf(card);
+                
+                if (draggedIndex < dropIndex) {
+                    card.parentNode.insertBefore(draggedCard, card.nextSibling);
+                } else {
+                    card.parentNode.insertBefore(draggedCard, card);
+                }
+            }
+        });
+    });
+}
+
+// Save card order to localStorage
+function saveCardOrder() {
+    const statsPanel = document.getElementById('statsPanel');
+    const cards = statsPanel.querySelectorAll('.collapsible-card');
+    const order = [...cards].map(card => card.dataset.cardId);
+    localStorage.setItem('epiMonitor_cardOrder', JSON.stringify(order));
+}
+
+// Save card collapsed states to localStorage
+function saveCardStates() {
+    const statsPanel = document.getElementById('statsPanel');
+    const cards = statsPanel.querySelectorAll('.collapsible-card');
+    const states = {};
+    
+    cards.forEach(card => {
+        const content = card.querySelector('.card-content');
+        states[card.dataset.cardId] = content.classList.contains('collapsed');
+    });
+    
+    localStorage.setItem('epiMonitor_cardStates', JSON.stringify(states));
+}
+
+// Restore card order and states from localStorage
+function restoreCardSettings() {
+    const statsPanel = document.getElementById('statsPanel');
+    
+    // Restore order
+    const savedOrder = localStorage.getItem('epiMonitor_cardOrder');
+    if (savedOrder) {
+        try {
+            const order = JSON.parse(savedOrder);
+            order.forEach(cardId => {
+                const card = statsPanel.querySelector(`[data-card-id="${cardId}"]`);
+                if (card) {
+                    statsPanel.appendChild(card);
+                }
+            });
+        } catch (e) {
+            console.error('Error restoring card order:', e);
+        }
+    }
+    
+    // Restore collapsed states
+    const savedStates = localStorage.getItem('epiMonitor_cardStates');
+    if (savedStates) {
+        try {
+            const states = JSON.parse(savedStates);
+            Object.entries(states).forEach(([cardId, isCollapsed]) => {
+                const card = statsPanel.querySelector(`[data-card-id="${cardId}"]`);
+                if (card) {
+                    const content = card.querySelector('.card-content');
+                    const icon = card.querySelector('.toggle-icon');
+                    
+                    if (isCollapsed) {
+                        content.classList.add('collapsed');
+                        icon.style.transform = 'rotate(-90deg)';
+                    } else {
+                        content.classList.remove('collapsed');
+                        icon.style.transform = 'rotate(0deg)';
+                    }
+                }
+            });
+        } catch (e) {
+            console.error('Error restoring card states:', e);
+        }
+    }
+}
+
 // Initialize app when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     window.epiMonitor = new EPIMonitor();
+    
+    // Initialize drag and drop
+    initDragAndDrop();
+    
+    // Restore saved settings
+    restoreCardSettings();
 });

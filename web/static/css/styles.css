@@ -324,8 +324,91 @@ body::before {
     background: var(--bg-card);
     backdrop-filter: blur(10px);
     border-radius: var(--radius-lg);
-    padding: var(--spacing-lg);
     border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+/* Collapsible Card Styles */
+.collapsible-card {
+    transition: all 0.3s ease;
+    cursor: grab;
+}
+
+.collapsible-card:active {
+    cursor: grabbing;
+}
+
+.collapsible-card.dragging {
+    opacity: 0.5;
+    transform: scale(1.02);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+}
+
+.collapsible-card.drag-over {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md) var(--spacing-lg);
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s ease;
+}
+
+.card-header:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.drag-handle {
+    font-size: 1rem;
+    color: var(--text-muted);
+    cursor: grab;
+    padding: 0 var(--spacing-xs);
+    letter-spacing: -2px;
+}
+
+.drag-handle:hover {
+    color: var(--accent-primary);
+}
+
+.card-header h2,
+.card-header h3 {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    margin: 0;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.toggle-icon {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    transition: transform 0.3s ease;
+}
+
+.card-content.collapsed + .card-header .toggle-icon,
+.card-header:has(+ .card-content.collapsed) .toggle-icon {
+    transform: rotate(-90deg);
+}
+
+.card-content {
+    padding: 0 var(--spacing-lg) var(--spacing-lg);
+    max-height: 500px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.card-content.collapsed {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    opacity: 0;
 }
 
 .stats-card h2,
@@ -334,7 +417,7 @@ body::before {
 .details-card h3 {
     font-size: 1rem;
     color: var(--text-secondary);
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: 0;
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
@@ -410,7 +493,7 @@ body::before {
     font-weight: 600;
 }
 
-/* Person Details - Enhanced */
+/* Person Details - Compact */
 .person-list {
     max-height: 300px;
     overflow-y: auto;
@@ -420,130 +503,83 @@ body::before {
     color: var(--text-muted);
     font-style: italic;
     text-align: center;
-    padding: var(--spacing-lg);
+    padding: var(--spacing-md);
 }
 
-.person-item {
+.person-row {
     display: flex;
-    flex-direction: column;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-md);
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-sm) var(--spacing-md);
     background: var(--bg-tertiary);
     border-radius: var(--radius-md);
-    margin-bottom: var(--spacing-md);
-    border-left: 4px solid var(--success);
+    margin-bottom: var(--spacing-xs);
+    border-left: 3px solid var(--success);
     transition: all 0.2s ease;
 }
 
-.person-item.success {
+.person-row.success {
     border-left-color: var(--success);
-    background: rgba(16, 185, 129, 0.1);
 }
 
-.person-item.warning {
+.person-row.warning {
     border-left-color: var(--warning);
-    background: rgba(245, 158, 11, 0.1);
 }
 
-.person-item.danger {
+.person-row.danger {
     border-left-color: var(--danger);
-    background: rgba(239, 68, 68, 0.1);
 }
 
-.person-header {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-}
-
-.person-status-icon {
-    font-size: 1.25rem;
-}
-
-.person-name {
-    font-weight: 600;
+.person-row .person-name {
+    font-weight: 500;
     color: var(--text-primary);
-    flex: 1;
+    font-size: 0.875rem;
+    min-width: 70px;
 }
 
-.epi-count {
-    font-size: 0.875rem;
+.epi-icons {
+    display: flex;
+    gap: var(--spacing-xs);
+    font-size: 1.1rem;
+}
+
+.epi-icons span {
+    transition: all 0.2s ease;
+}
+
+.epi-icons span.has {
+    opacity: 1;
+    filter: none;
+}
+
+.epi-icons span.missing {
+    opacity: 0.3;
+    filter: grayscale(100%);
+}
+
+.epi-badge {
+    font-size: 0.75rem;
     font-weight: 700;
-    padding: 2px 8px;
+    padding: 2px 6px;
     border-radius: var(--radius-sm);
     background: var(--bg-secondary);
     color: var(--text-secondary);
+    margin-left: auto;
 }
 
-.person-item.success .epi-count {
+.person-row.success .epi-badge {
     background: var(--success);
     color: white;
 }
 
-.person-item.warning .epi-count {
+.person-row.warning .epi-badge {
     background: var(--warning);
     color: black;
 }
 
-.person-item.danger .epi-count {
+.person-row.danger .epi-badge {
     background: var(--danger);
     color: white;
-}
-
-.person-epi-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.epi-item {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    padding: 6px 10px;
-    border-radius: var(--radius-sm);
-    font-size: 0.875rem;
-    transition: all 0.2s ease;
-}
-
-.epi-item.has-epi {
-    background: rgba(16, 185, 129, 0.2);
-    border: 1px solid rgba(16, 185, 129, 0.4);
-}
-
-.epi-item.missing-epi {
-    background: rgba(239, 68, 68, 0.2);
-    border: 1px solid rgba(239, 68, 68, 0.4);
-}
-
-.epi-icon {
-    font-size: 1.1rem;
-}
-
-.epi-label {
-    flex: 1;
-    color: var(--text-secondary);
-}
-
-.epi-item.has-epi .epi-label {
-    color: var(--success);
-}
-
-.epi-item.missing-epi .epi-label {
-    color: var(--danger);
-}
-
-.epi-status {
-    font-weight: 700;
-    font-size: 1rem;
-}
-
-.epi-item.has-epi .epi-status {
-    color: var(--success);
-}
-
-.epi-item.missing-epi .epi-status {
-    color: var(--danger);
 }
 
 /* ============================================

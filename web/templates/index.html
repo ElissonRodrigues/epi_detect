@@ -59,63 +59,86 @@
             </section>
 
             <!-- Stats Panel -->
-            <aside class="stats-panel">
-                <div class="stats-card">
-                    <h2>📊 Status em Tempo Real</h2>
-                    
-                    <div class="stat-item">
-                        <div class="stat-label">Pessoas Detectadas</div>
-                        <div class="stat-value" id="personCount">0</div>
+            <aside class="stats-panel" id="statsPanel">
+                <div class="collapsible-card stats-card" draggable="true" data-card-id="status">
+                    <div class="card-header" onclick="toggleCard(this)">
+                        <span class="drag-handle">⋮⋮</span>
+                        <h2>📊 Status em Tempo Real</h2>
+                        <span class="toggle-icon">▼</span>
                     </div>
-                    
-                    <div class="stat-item compliant">
-                        <div class="stat-label">✅ Em Conformidade</div>
-                        <div class="stat-value" id="compliantCount">0</div>
-                    </div>
-                    
-                    <div class="stat-item non-compliant">
-                        <div class="stat-label">⚠️ Sem EPIs Completos</div>
-                        <div class="stat-value" id="nonCompliantCount">0</div>
+                    <div class="card-content collapsed">
+                        <div class="stat-item">
+                            <div class="stat-label">Pessoas Detectadas</div>
+                            <div class="stat-value" id="personCount">0</div>
+                        </div>
+                        
+                        <div class="stat-item compliant">
+                            <div class="stat-label">✅ Em Conformidade</div>
+                            <div class="stat-value" id="compliantCount">0</div>
+                        </div>
+                        
+                        <div class="stat-item non-compliant">
+                            <div class="stat-label">⚠️ Sem EPIs Completos</div>
+                            <div class="stat-value" id="nonCompliantCount">0</div>
+                        </div>
                     </div>
                 </div>
 
                 <!-- EPI Legend -->
-                <div class="legend-card">
-                    <h3>🎨 Legenda</h3>
-                    <ul class="legend-list">
-                        <li>
-                            <span class="legend-color" style="background: #00c800;"></span>
-                            Todos os EPIs
-                        </li>
-                        <li>
-                            <span class="legend-color" style="background: #ffc800;"></span>
-                            EPIs Parciais
-                        </li>
-                        <li>
-                            <span class="legend-color" style="background: #ff0000;"></span>
-                            Sem EPIs
-                        </li>
-                    </ul>
+                <div class="collapsible-card legend-card" draggable="true" data-card-id="legend">
+                    <div class="card-header" onclick="toggleCard(this)">
+                        <span class="drag-handle">⋮⋮</span>
+                        <h3>🎨 Legenda</h3>
+                        <span class="toggle-icon">▼</span>
+                    </div>
+                    <div class="card-content collapsed">
+                        <ul class="legend-list">
+                            <li>
+                                <span class="legend-color" style="background: #00c800;"></span>
+                                Todos os EPIs
+                            </li>
+                            <li>
+                                <span class="legend-color" style="background: #ffc800;"></span>
+                                EPIs Parciais
+                            </li>
+                            <li>
+                                <span class="legend-color" style="background: #ff0000;"></span>
+                                Sem EPIs
+                            </li>
+                        </ul>
+                    </div>
                 </div>
 
                 <!-- Performance Stats -->
-                <div class="performance-card">
-                    <h3>⚡ Performance</h3>
-                    <div class="perf-item">
-                        <span>FPS:</span>
-                        <span id="fpsValue">0</span>
+                <div class="collapsible-card performance-card" draggable="true" data-card-id="performance">
+                    <div class="card-header" onclick="toggleCard(this)">
+                        <span class="drag-handle">⋮⋮</span>
+                        <h3>⚡ Performance</h3>
+                        <span class="toggle-icon">▼</span>
                     </div>
-                    <div class="perf-item">
-                        <span>Latência:</span>
-                        <span id="latencyValue">0ms</span>
+                    <div class="card-content collapsed">
+                        <div class="perf-item">
+                            <span>FPS:</span>
+                            <span id="fpsValue">0</span>
+                        </div>
+                        <div class="perf-item">
+                            <span>Latência:</span>
+                            <span id="latencyValue">0ms</span>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Person Details -->
-                <div class="details-card">
-                    <h3>👥 Detalhes por Pessoa</h3>
-                    <div id="personDetails" class="person-list">
-                        <p class="no-detections">Nenhuma pessoa detectada</p>
+                <div class="collapsible-card details-card" draggable="true" data-card-id="details">
+                    <div class="card-header" onclick="toggleCard(this)">
+                        <span class="drag-handle">⋮⋮</span>
+                        <h3>👥 Detalhes por Pessoa</h3>
+                        <span class="toggle-icon">▼</span>
+                    </div>
+                    <div class="card-content collapsed">
+                        <div id="personDetails" class="person-list">
+                            <p class="no-detections">Nenhuma pessoa detectada</p>
+                        </div>
                     </div>
                 </div>
             </aside>
