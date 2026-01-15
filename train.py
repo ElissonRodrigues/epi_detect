@@ -11,7 +11,7 @@ from PIL import Image
 # --- CONFIGURAÇÕES ---
 # Substitua pelo caminho do seu dataset
 DATA_DIR = "dataset"
-# Defina suas classes aqui (deve incluir background como primeira classe)
+
 CLASSES = ["__background__", "helmet", "vest", "gloves"]
 BATCH_SIZE = 2
 NUM_EPOCHS = 10
