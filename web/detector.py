@@ -23,24 +23,18 @@ class EPIDetector:
 
         # Modelo COCO para detectar pessoas
         print("  - Carregando modelo COCO para detecção de pessoas...")
-        self.person_model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
-            weights="DEFAULT"
-        )
+        self.person_model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights="DEFAULT")
         self.person_model = self.person_model.to(self.device).eval()
 
         # Modelo customizado para EPIs
         self.epi_model = None
         if epi_model_path:
             print(f"  - Carregando modelo EPI de: {epi_model_path}")
-            self.epi_model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
-                weights="DEFAULT"
-            )
+            self.epi_model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights="DEFAULT")
             in_features = self.epi_model.roi_heads.box_predictor.cls_score.in_features
             self.epi_model.roi_heads.box_predictor = FastRCNNPredictor(in_features, 4)
 
-            state_dict = torch.load(
-                epi_model_path, map_location=self.device, weights_only=True
-            )
+            state_dict = torch.load(epi_model_path, map_location=self.device, weights_only=True)
             self.epi_model.load_state_dict(state_dict)
             self.epi_model = self.epi_model.to(self.device).eval()
 
@@ -63,9 +57,7 @@ class EPIDetector:
 
         with torch.no_grad():
             person_predictions = self.person_model(img_tensor)[0]
-            epi_predictions = (
-                self.epi_model(img_tensor)[0] if self.epi_model else None
-            )
+            epi_predictions = self.epi_model(img_tensor)[0] if self.epi_model else None
 
         # Combinar detecções
         results = self._combine_predictions(person_predictions, epi_predictions)
@@ -100,51 +92,63 @@ class EPIDetector:
 
         return combined
 
-    def _calculate_iou(self, box1, box2) -> float:
-        """Calcula IoU entre duas caixas."""
-        x1_1, y1_1, x2_1, y2_1 = box1
-        x1_2, y1_2, x2_2, y2_2 = box2
+    def _calculate_overlap(self, person_box, epi_box) -> float:
+        """
+        Calcula a sobreposição do EPI (box2) em relação à pessoa (box1).
+        Usa Intersection over EPI Area para lidar com a diferença de escala.
+        """
+        x1_p, y1_p, x2_p, y2_p = person_box
+        x1_e, y1_e, x2_e, y2_e = epi_box
 
-        x1_inter = max(x1_1, x1_2)
-        y1_inter = max(y1_1, y1_2)
-        x2_inter = min(x2_1, x2_2)
-        y2_inter = min(y2_1, y2_2)
+        x1_inter = max(x1_p, x1_e)
+        y1_inter = max(y1_p, y1_e)
+        x2_inter = min(x2_p, x2_e)
+        y2_inter = min(y2_p, y2_e)
 
         if x2_inter < x1_inter or y2_inter < y1_inter:
             return 0.0
 
         inter_area = (x2_inter - x1_inter) * (y2_inter - y1_inter)
-        box1_area = (x2_1 - x1_1) * (y2_1 - y1_1)
-        box2_area = (x2_2 - x1_2) * (y2_2 - y1_2)
-        union_area = box1_area + box2_area - inter_area
+        epi_area = (x2_e - x1_e) * (y2_e - y1_e)
 
-        return inter_area / union_area if union_area > 0 else 0.0
+        return inter_area / epi_area if epi_area > 0 else 0.0
 
-    def _check_epi_usage(
-        self, results: list[tuple], iou_threshold: float = 0.1
-    ) -> list[dict]:
+    def _validate_anatomical_position(self, person_box, epi_box, epi_type) -> bool:
+        """
+        Verifica se o EPI está em uma posição anatômica plausível.
+        Ex: Capacete deve estar no topo, colete no meio.
+        """
+        _, y1_p, _, y2_p = person_box
+        _, y1_e, _, y2_e = epi_box
+
+        person_height = y2_p - y1_p
+        if person_height == 0:
+            return False
+
+        epi_center_y = (y1_e + y2_e) / 2
+        # Posição relativa do centro do EPI (0.0 = topo da pessoa, 1.0 = pé da pessoa)
+        relative_pos = (epi_center_y - y1_p) / person_height
+
+        if epi_type == "helmet":
+            # Capacete deve estar na parte superior (topo 40%)
+            # Evita detectar capacete segurado no peito ou cintura
+            return relative_pos < 0.40
+
+        if epi_type == "vest":
+            # Colete deve estar no tronco (entre 10% e 80%)
+            # Evita detectar colete jogado no chão perto do pé ou segurado muito alto
+            return 0.10 < relative_pos < 0.80
+
+        # Luvas podem estar em qualquer lugar (mãos se movem muito)
+        return True
+
+    def _check_epi_usage(self, results: list[tuple], threshold: float = 0.1) -> list[dict]:
         """Verifica uso de EPIs por pessoa."""
-        persons = [
-            (box, idx)
-            for idx, (box, label, _) in enumerate(results)
-            if label == "person"
-        ]
+        persons = [(box, idx) for idx, (box, label, _) in enumerate(results) if label == "person"]
         epis = {
-            "helmet": [
-                (box, idx)
-                for idx, (box, label, _) in enumerate(results)
-                if label == "helmet"
-            ],
-            "vest": [
-                (box, idx)
-                for idx, (box, label, _) in enumerate(results)
-                if label == "vest"
-            ],
-            "gloves": [
-                (box, idx)
-                for idx, (box, label, _) in enumerate(results)
-                if label == "gloves"
-            ],
+            "helmet": [(box, idx) for idx, (box, label, _) in enumerate(results) if label == "helmet"],
+            "vest": [(box, idx) for idx, (box, label, _) in enumerate(results) if label == "vest"],
+            "gloves": [(box, idx) for idx, (box, label, _) in enumerate(results) if label == "gloves"],
         }
 
         person_epi_status = []
@@ -160,10 +164,12 @@ class EPIDetector:
 
             for epi_type, epi_list in epis.items():
                 for epi_box, _ in epi_list:
-                    iou = self._calculate_iou(person_box, epi_box)
-                    if iou > iou_threshold:
-                        status[epi_type] = True
-                        break
+                    overlap = self._calculate_overlap(person_box, epi_box)
+                    if overlap > threshold:
+                        # Verifica se faz sentido anatomicamente
+                        if self._validate_anatomical_position(person_box, epi_box, epi_type):
+                            status[epi_type] = True
+                            break
 
             person_epi_status.append(status)
 
