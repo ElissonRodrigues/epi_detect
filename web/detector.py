@@ -15,10 +15,12 @@ CONFIDENCE_THRESHOLD = 0.7
 class EPIDetector:
     """Detector de EPIs usando Faster R-CNN."""
 
-    EPI_CLASSES = ["__background__", "helmet", "vest", "gloves"]
+    EPI_CLASSES = ["__background__", "helmet", "vest", "gloves", "_head_", "_not_helmet_"]
+    # Classes que são ignoradas na exibição (usadas apenas para treinamento)
+    IGNORED_CLASSES = ["_head_", "_not_helmet_"]
 
     def __init__(self, epi_model_path: str | None = None):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # type: ignore
         print(f"Inicializando detector no dispositivo: {self.device}")
 
         # Modelo COCO para detectar pessoas
@@ -31,8 +33,8 @@ class EPIDetector:
         if epi_model_path:
             print(f"  - Carregando modelo EPI de: {epi_model_path}")
             self.epi_model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights="DEFAULT")
-            in_features = self.epi_model.roi_heads.box_predictor.cls_score.in_features
-            self.epi_model.roi_heads.box_predictor = FastRCNNPredictor(in_features, 4)
+            in_features = self.epi_model.roi_heads.box_predictor.cls_score.in_features  # type: ignore
+            self.epi_model.roi_heads.box_predictor = FastRCNNPredictor(in_features, len(self.EPI_CLASSES))
 
             state_dict = torch.load(epi_model_path, map_location=self.device, weights_only=True)
             self.epi_model.load_state_dict(state_dict)
@@ -86,8 +88,11 @@ class EPIDetector:
                 if score > CONFIDENCE_THRESHOLD:
                     label_id = epi_predictions["labels"][i].item()
                     if 0 < label_id < len(self.EPI_CLASSES):
-                        box = epi_predictions["boxes"][i].cpu().numpy().astype(int)
                         label = self.EPI_CLASSES[label_id]
+                        # Ignora classes de referência negativa
+                        if label in self.IGNORED_CLASSES:
+                            continue
+                        box = epi_predictions["boxes"][i].cpu().numpy().astype(int)
                         combined.append((box, label, score))
 
         return combined

@@ -11,14 +11,18 @@ import numpy as np
 
 # --- CONFIGURAÇÕES ---
 DATA_DIR = "dataset"
-CLASSES = ["__background__", "helmet", "vest", "gloves"]
-BATCH_SIZE = 4
-NUM_EPOCHS = 20
+# Classes para treinamento
+# _head_ e _not_helmet_ são classes de referência negativa - usadas para o modelo aprender
+# a diferenciar cabeças/cabelos de capacetes, evitando falsos positivos.
+# Na inferência, essas classes podem ser ignoradas na exibição.
+CLASSES = ["__background__", "helmet", "vest", "gloves", "_head_", "_not_helmet_"]
+BATCH_SIZE = 12
+NUM_EPOCHS = 40
 LEARNING_RATE = 0.005
 TRAIN_SPLIT = 0.8  # 80% treino, 20% validação
+NUM_WORKERS = 8 # 8 threads de processamento paralelo
 
-
-# --- UTILS DE TRANSFORMAÇÃO (Corrige o bug de flip) ---
+# --- UTILS DE TRANSFORMAÇÃO ---
 class Compose:
     def __init__(self, transforms):
         self.transforms = transforms
@@ -57,15 +61,15 @@ class ColorJitter:
         self.transform = torchvision.transforms.ColorJitter(brightness=brightness, contrast=contrast, saturation=saturation, hue=hue)
 
     def __call__(self, image, target):
-        # ColorJitter espera PIL ou Tensor. Como aplicamos antes de ToTensor, é PIL.
+        # ColorJitter espera PIL ou Tensor.
         image = self.transform(image)
         return image, target
 
 
 def get_transform(train):
-    transforms = []
+    transforms: list = []
     if train:
-        # Adiciona variação de cor para robustez (ajuda a diferenciar cabelo de capacete)
+        # Adiciona variação de cor para robustez
         transforms.append(ColorJitter())
         transforms.append(ToTensor())
         transforms.append(RandomHorizontalFlip(0.5))
@@ -95,16 +99,21 @@ class EPIDataset(Dataset):
         labels = []
 
         for obj in root_xml.findall("object"):
-            label_text = obj.find("name").text
+            name_elem = obj.find("name")
+
+            if name_elem is None or name_elem.text is None:
+                continue
+
+            label_text = name_elem.text
             if label_text in CLASSES:
                 label_id = CLASSES.index(label_text)
                 labels.append(label_id)
 
                 bndbox = obj.find("bndbox")
-                xmin = float(bndbox.find("xmin").text)
-                ymin = float(bndbox.find("ymin").text)
-                xmax = float(bndbox.find("xmax").text)
-                ymax = float(bndbox.find("ymax").text)
+                xmin = float(bndbox.find("xmin").text)  # type: ignore
+                ymin = float(bndbox.find("ymin").text)  # type: ignore
+                xmax = float(bndbox.find("xmax").text)  # type: ignore
+                ymax = float(bndbox.find("ymax").text)  # type: ignore
                 boxes.append([xmin, ymin, xmax, ymax])
 
         if len(boxes) == 0:
@@ -128,7 +137,6 @@ class EPIDataset(Dataset):
     def __len__(self):
         return len(self.imgs)
 
-    # Necessário para evitar erro de pickle ao usar SubsetRandomSampler com transforms diferentes
     def set_transforms(self, transforms):
         self.transforms = transforms
 
@@ -140,7 +148,7 @@ def collate_fn(batch):
 # --- MODELO ---
 def get_model(num_classes):
     model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights="DEFAULT")
-    in_features = model.roi_heads.box_predictor.cls_score.in_features
+    in_features = model.roi_heads.box_predictor.cls_score.in_features  # type: ignore
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
     return model
 
@@ -152,7 +160,7 @@ def main():
 
     try:
         # Preparar Dataset
-        dataset = EPIDataset(DATA_DIR, None)  # Transforms serão aplicados no Loop ou via Wrapper
+        dataset = EPIDataset(DATA_DIR, None)
 
         if len(dataset) == 0:
             print("ERRO: Dataset vazio ou não encontrado.")
@@ -169,16 +177,13 @@ def main():
         print(f"Treino: {len(train_indices)}, Validação: {len(val_indices)}")
 
         # Wrappers customizados para aplicar transforms corretos em cada split
-        # Como o SubsetRandomSampler apenas seleciona índices, precisamos de uma forma de injetar transforms.
-        # A maneira mais limpa sem criar duas instâncias de dataset carregando tudo 2x é ter subclasses ou wrappers.
-        # Simplificação: Criar dois datasets apontando para o mesmo lugar.
         train_dataset = EPIDataset(DATA_DIR, get_transform(train=True))
         val_dataset = EPIDataset(DATA_DIR, get_transform(train=False))
 
         train_loader = DataLoader(
-            train_dataset, batch_size=BATCH_SIZE, sampler=SubsetRandomSampler(train_indices), num_workers=2, collate_fn=collate_fn
+            train_dataset, batch_size=BATCH_SIZE, sampler=SubsetRandomSampler(train_indices), num_workers=NUM_WORKERS, collate_fn=collate_fn, pin_memory=True
         )
-        val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, sampler=SubsetRandomSampler(val_indices), num_workers=2, collate_fn=collate_fn)
+        val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, sampler=SubsetRandomSampler(val_indices), num_workers=NUM_WORKERS, collate_fn=collate_fn, pin_memory=True)
 
         num_classes = len(CLASSES)
         model = get_model(num_classes)
@@ -186,7 +191,7 @@ def main():
 
         params = [p for p in model.parameters() if p.requires_grad]
         optimizer = torch.optim.SGD(params, lr=LEARNING_RATE, momentum=0.9, weight_decay=0.0005)
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=8, gamma=0.1)
 
         best_val_loss = float("inf")
 
@@ -213,11 +218,7 @@ def main():
             avg_train_loss = train_loss_epoch / train_batches if train_batches > 0 else 0
 
             # --- VALIDAÇÃO ---
-            # Faster R-CNN retorna losses durante training=True, e predições durante training=False.
-            # Para calcular loss de validação, precisamos colocar em modo train() mas sem backprop.
-            # Existe um truque: manter train() mas usar torch.no_grad().
-
-            model.train()  # Mantém modo treino para retornar losses
+            model.train()
             val_loss_epoch = 0
             val_batches = 0
 

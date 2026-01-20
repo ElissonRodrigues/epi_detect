@@ -33,6 +33,8 @@ env/
 *.swo
 *~
 
+dataset/
+
 # Jupyter
 .ipynb_checkpoints/
 
@@ -42,7 +44,6 @@ env/
 *.onnx
 
 # Dataset (usually too large for git)
-dataset/
 
 # Logs
 *.log
