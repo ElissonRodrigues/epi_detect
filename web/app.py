@@ -66,7 +66,7 @@ def handle_frame(data):
     global detector
 
     start_time = time.time()
-    #print(f"Frame recebido - tamanho: {len(str(data.get('image', '')))}")
+    # print(f"Frame recebido - tamanho: {len(str(data.get('image', '')))}")
 
     if detector is None:
         emit("error", {"message": "Detector não inicializado"})
@@ -107,7 +107,7 @@ def handle_frame(data):
         }
 
         elapsed = time.time() - start_time
-        #print(f"Frame processado em {elapsed*1000:.0f}ms - {len(results)} detecções")
+        # print(f"Frame processado em {elapsed*1000:.0f}ms - {len(results)} detecções")
         emit("result", response)
 
     except Exception as e:
@@ -122,7 +122,7 @@ def draw_detections(frame: np.ndarray, results: list[tuple], epi_status: list[di
     """Desenha detecções e status no frame."""
     annotated = frame.copy()
 
-    # Mapeamento de pessoa para status
+    # Mapeamento de pessoa para status (inclui person_number para correlação)
     person_status_map = {s["person_idx"]: s for s in epi_status}
 
     # Cores para cada tipo
@@ -142,6 +142,7 @@ def draw_detections(frame: np.ndarray, results: list[tuple], epi_status: list[di
             # Determinar cor baseada no status de EPIs
             if idx in person_status_map:
                 status = person_status_map[idx]
+                person_number = status.get("person_number", 0)
                 epi_count = sum([status["helmet"], status["vest"], status["gloves"]])
                 if epi_count == 3:
                     color = colors["person_ok"]
@@ -151,9 +152,41 @@ def draw_detections(frame: np.ndarray, results: list[tuple], epi_status: list[di
                     color = colors["person_none"]
             else:
                 color = colors["person_partial"]
+                person_number = 0
 
             # Desenhar bounding box
             cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 3)
+
+            # Desenhar número da pessoa (círculo com número grande)
+            if person_number > 0:
+                # Calcular posição do círculo (canto superior esquerdo da pessoa)
+                circle_radius = 25
+                circle_x = x1 + circle_radius + 5
+                circle_y = y1 + circle_radius + 5
+
+                # Garantir que o círculo fique dentro do frame
+                circle_x = max(circle_radius + 2, min(circle_x, frame.shape[1] - circle_radius - 2))
+                circle_y = max(circle_radius + 2, min(circle_y, frame.shape[0] - circle_radius - 2))
+
+                # Desenhar círculo de fundo
+                cv2.circle(annotated, (circle_x, circle_y), circle_radius, color, -1)
+                cv2.circle(annotated, (circle_x, circle_y), circle_radius, (255, 255, 255), 2)
+
+                # Desenhar número centralizado
+                number_text = str(person_number)
+                font_scale = 1.0 if person_number < 10 else 0.8
+                (tw, th), _ = cv2.getTextSize(number_text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, 3)
+                text_x = circle_x - tw // 2
+                text_y = circle_y + th // 2
+                cv2.putText(
+                    annotated,
+                    number_text,
+                    (text_x, text_y),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    font_scale,
+                    (255, 255, 255),
+                    3,
+                )
 
             # Status text
             if idx in person_status_map:

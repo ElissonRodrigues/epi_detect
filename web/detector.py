@@ -158,9 +158,10 @@ class EPIDetector:
 
         person_epi_status = []
 
-        for person_box, person_idx in persons:
+        for person_number, (person_box, person_idx) in enumerate(persons, start=1):
             status = {
                 "person_idx": person_idx,
+                "person_number": person_number,  # Número visível para correlação com o vídeo
                 "box": person_box.tolist(),
                 "helmet": False,
                 "vest": False,

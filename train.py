@@ -181,7 +181,6 @@ def collate_fn(batch):
 
 # --- MODELO ---
 def get_model(num_classes):
-    # Usando versão V2 do Faster R-CNN com backbone melhorado
     model = torchvision.models.detection.fasterrcnn_resnet50_fpn_v2(weights="DEFAULT")
     in_features = model.roi_heads.box_predictor.cls_score.in_features  # type: ignore
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
@@ -238,7 +237,7 @@ def main():
 
         params = [p for p in model.parameters() if p.requires_grad]
         optimizer = torch.optim.SGD(params, lr=LEARNING_RATE, momentum=0.9, weight_decay=0.0005)
-        # CosineAnnealingWarmRestarts para melhor convergência
+        # melhorar convergência
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
 
         best_val_loss = float("inf")
