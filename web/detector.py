@@ -25,14 +25,14 @@ class EPIDetector:
 
         # Modelo COCO para detectar pessoas
         print("  - Carregando modelo COCO para detecção de pessoas...")
-        self.person_model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights="DEFAULT")
+        self.person_model = torchvision.models.detection.fasterrcnn_resnet50_fpn_v2(weights="DEFAULT")
         self.person_model = self.person_model.to(self.device).eval()
 
         # Modelo customizado para EPIs
         self.epi_model = None
         if epi_model_path:
             print(f"  - Carregando modelo EPI de: {epi_model_path}")
-            self.epi_model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights="DEFAULT")
+            self.epi_model = torchvision.models.detection.fasterrcnn_resnet50_fpn_v2(weights="DEFAULT")
             in_features = self.epi_model.roi_heads.box_predictor.cls_score.in_features  # type: ignore
             self.epi_model.roi_heads.box_predictor = FastRCNNPredictor(in_features, len(self.EPI_CLASSES))
 

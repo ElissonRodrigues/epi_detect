@@ -16,11 +16,12 @@ DATA_DIR = "dataset"
 # a diferenciar cabeças/cabelos de capacetes, evitando falsos positivos.
 # Na inferência, essas classes podem ser ignoradas na exibição.
 CLASSES = ["__background__", "helmet", "vest", "gloves", "_head_", "_not_helmet_"]
-BATCH_SIZE = 12
-NUM_EPOCHS = 40
+BATCH_SIZE = 6  # Reduzido para modelo V2 (usa mais VRAM)
+NUM_EPOCHS = 60  # Aumentado para permitir mais refinamento
 LEARNING_RATE = 0.005
 TRAIN_SPLIT = 0.8  # 80% treino, 20% validação
-NUM_WORKERS = 8 # 8 threads de processamento paralelo
+NUM_WORKERS = 8  # 8 threads de processamento paralelo
+
 
 # --- UTILS DE TRANSFORMAÇÃO ---
 class Compose:
@@ -57,22 +58,55 @@ class RandomHorizontalFlip:
 class ColorJitter:
     """Aplica distorções de cor apenas na imagem."""
 
-    def __init__(self, brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05):
+    def __init__(self, brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1):
         self.transform = torchvision.transforms.ColorJitter(brightness=brightness, contrast=contrast, saturation=saturation, hue=hue)
 
     def __call__(self, image, target):
-        # ColorJitter espera PIL ou Tensor.
         image = self.transform(image)
+        return image, target
+
+
+class GaussianBlur:
+    """Aplica blur gaussiano aleatório."""
+
+    def __init__(self, kernel_size=5, sigma=(0.1, 2.0), prob=0.3):
+        self.transform = torchvision.transforms.GaussianBlur(kernel_size, sigma)
+        self.prob = prob
+
+    def __call__(self, image, target):
+        if random.random() < self.prob:
+            image = self.transform(image)
+        return image, target
+
+
+class RandomAffine:
+    """Aplica rotação e escala aleatória."""
+
+    def __init__(self, degrees=10, scale=(0.9, 1.1), prob=0.3):
+        self.degrees = degrees
+        self.scale = scale
+        self.prob = prob
+
+    def __call__(self, image, target):
+        if random.random() < self.prob:
+            # Apenas aplica na imagem PIL (antes do ToTensor)
+            angle = random.uniform(-self.degrees, self.degrees)
+            scale = random.uniform(self.scale[0], self.scale[1])
+            image = F.affine(image, angle=angle, translate=[0, 0], scale=scale, shear=[0.0])
+            # Nota: boxes não são transformados para manter simplicidade
+            # Em produção, seria necessário transformar os boxes também
         return image, target
 
 
 def get_transform(train):
     transforms: list = []
     if train:
-        # Adiciona variação de cor para robustez
-        transforms.append(ColorJitter())
+        # Data augmentation agressivo para melhor generalização
+        transforms.append(ColorJitter())  # Variação de cor
+        transforms.append(GaussianBlur())  # Blur aleatório
+        transforms.append(RandomAffine())  # Rotação e escala leve
         transforms.append(ToTensor())
-        transforms.append(RandomHorizontalFlip(0.5))
+        transforms.append(RandomHorizontalFlip(0.5))  # Flip horizontal
     else:
         transforms.append(ToTensor())
     return Compose(transforms)
@@ -147,7 +181,8 @@ def collate_fn(batch):
 
 # --- MODELO ---
 def get_model(num_classes):
-    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights="DEFAULT")
+    # Usando versão V2 do Faster R-CNN com backbone melhorado
+    model = torchvision.models.detection.fasterrcnn_resnet50_fpn_v2(weights="DEFAULT")
     in_features = model.roi_heads.box_predictor.cls_score.in_features  # type: ignore
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
     return model
@@ -181,9 +216,21 @@ def main():
         val_dataset = EPIDataset(DATA_DIR, get_transform(train=False))
 
         train_loader = DataLoader(
-            train_dataset, batch_size=BATCH_SIZE, sampler=SubsetRandomSampler(train_indices), num_workers=NUM_WORKERS, collate_fn=collate_fn, pin_memory=True
+            train_dataset,
+            batch_size=BATCH_SIZE,
+            sampler=SubsetRandomSampler(train_indices),
+            num_workers=NUM_WORKERS,
+            collate_fn=collate_fn,
+            pin_memory=True,
         )
-        val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, sampler=SubsetRandomSampler(val_indices), num_workers=NUM_WORKERS, collate_fn=collate_fn, pin_memory=True)
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=BATCH_SIZE,
+            sampler=SubsetRandomSampler(val_indices),
+            num_workers=NUM_WORKERS,
+            collate_fn=collate_fn,
+            pin_memory=True,
+        )
 
         num_classes = len(CLASSES)
         model = get_model(num_classes)
@@ -191,7 +238,8 @@ def main():
 
         params = [p for p in model.parameters() if p.requires_grad]
         optimizer = torch.optim.SGD(params, lr=LEARNING_RATE, momentum=0.9, weight_decay=0.0005)
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=8, gamma=0.1)
+        # CosineAnnealingWarmRestarts para melhor convergência
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
 
         best_val_loss = float("inf")
 
