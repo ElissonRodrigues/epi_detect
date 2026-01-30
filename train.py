@@ -12,15 +12,22 @@ import numpy as np
 # --- CONFIGURAÇÕES ---
 DATA_DIR = "dataset"
 # Classes para treinamento
-# _head_ e _not_helmet_ são classes de referência negativa - usadas para o modelo aprender
-# a diferenciar cabeças/cabelos de capacetes, evitando falsos positivos.
-# Na inferência, essas classes podem ser ignoradas na exibição.
-CLASSES = ["__background__", "helmet", "vest", "gloves", "_head_", "_not_helmet_"]
-BATCH_SIZE = 6  # Reduzido para modelo V2 (usa mais VRAM)
-NUM_EPOCHS = 60  # Aumentado para permitir mais refinamento
+# Adicionado 'person' conforme solicitado
+# _head_ e _not_helmet_ são classes de referência negativa
+CLASSES = [
+    "__background__",
+    "person",
+    "helmet",
+    "vest",
+    "gloves",
+    "_head_",
+    "_not_helmet_",
+]
+BATCH_SIZE = 6
+NUM_EPOCHS = 60
 LEARNING_RATE = 0.005
-TRAIN_SPLIT = 0.8  # 80% treino, 20% validação
-NUM_WORKERS = 8  # 8 threads de processamento paralelo
+TRAIN_SPLIT = 0.8
+NUM_WORKERS = 8
 
 
 # --- UTILS DE TRANSFORMAÇÃO ---
@@ -59,7 +66,9 @@ class ColorJitter:
     """Aplica distorções de cor apenas na imagem."""
 
     def __init__(self, brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1):
-        self.transform = torchvision.transforms.ColorJitter(brightness=brightness, contrast=contrast, saturation=saturation, hue=hue)
+        self.transform = torchvision.transforms.ColorJitter(
+            brightness=brightness, contrast=contrast, saturation=saturation, hue=hue
+        )
 
     def __call__(self, image, target):
         image = self.transform(image)
@@ -92,7 +101,9 @@ class RandomAffine:
             # Apenas aplica na imagem PIL (antes do ToTensor)
             angle = random.uniform(-self.degrees, self.degrees)
             scale = random.uniform(self.scale[0], self.scale[1])
-            image = F.affine(image, angle=angle, translate=[0, 0], scale=scale, shear=[0.0])
+            image = F.affine(
+                image, angle=angle, translate=[0, 0], scale=scale, shear=[0.0]
+            )
             # Nota: boxes não são transformados para manter simplicidade
             # Em produção, seria necessário transformar os boxes também
         return image, target
@@ -158,10 +169,20 @@ class EPIDataset(Dataset):
             labels = torch.as_tensor(labels, dtype=torch.int64)
 
         image_id = torch.tensor([index])
-        area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0]) if len(boxes) > 0 else torch.zeros((0,), dtype=torch.float32)
+        area = (
+            (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
+            if len(boxes) > 0
+            else torch.zeros((0,), dtype=torch.float32)
+        )
         iscrowd = torch.zeros((len(boxes),), dtype=torch.int64)
 
-        target = {"boxes": boxes, "labels": labels, "image_id": image_id, "area": area, "iscrowd": iscrowd}
+        target = {
+            "boxes": boxes,
+            "labels": labels,
+            "image_id": image_id,
+            "area": area,
+            "iscrowd": iscrowd,
+        }
 
         if self.transforms:
             img, target = self.transforms(img, target)
@@ -236,9 +257,13 @@ def main():
         model.to(device)
 
         params = [p for p in model.parameters() if p.requires_grad]
-        optimizer = torch.optim.SGD(params, lr=LEARNING_RATE, momentum=0.9, weight_decay=0.0005)
+        optimizer = torch.optim.SGD(
+            params, lr=LEARNING_RATE, momentum=0.9, weight_decay=0.0005
+        )
         # melhorar convergência
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer, T_0=10, T_mult=2, eta_min=1e-6
+        )
 
         best_val_loss = float("inf")
 
@@ -262,7 +287,9 @@ def main():
                 train_loss_epoch += losses.item()
                 train_batches += 1
 
-            avg_train_loss = train_loss_epoch / train_batches if train_batches > 0 else 0
+            avg_train_loss = (
+                train_loss_epoch / train_batches if train_batches > 0 else 0
+            )
 
             # --- VALIDAÇÃO ---
             model.train()
@@ -283,7 +310,9 @@ def main():
 
             lr_scheduler.step()
 
-            print(f"Epoch: {epoch+1}/{NUM_EPOCHS} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+            print(
+                f"Epoch: {epoch+1}/{NUM_EPOCHS} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}"
+            )
 
             # Salvar melhor modelo
             if avg_val_loss < best_val_loss:

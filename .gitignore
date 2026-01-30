@@ -26,6 +26,9 @@ venv/
 ENV/
 env/
 
+dataset/
+
+
 # IDE
 .idea/
 .vscode/
@@ -33,7 +36,6 @@ env/
 *.swo
 *~
 
-dataset/
 
 # Jupyter
 .ipynb_checkpoints/

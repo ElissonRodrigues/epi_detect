@@ -15,7 +15,16 @@ CONFIDENCE_THRESHOLD = 0.7
 class EPIDetector:
     """Detector de EPIs usando Faster R-CNN."""
 
-    EPI_CLASSES = ["__background__", "helmet", "vest", "gloves", "_head_", "_not_helmet_"]
+    # Atualizado para incluir 'person'
+    EPI_CLASSES = [
+        "__background__",
+        "person",
+        "helmet",
+        "vest",
+        "gloves",
+        "_head_",
+        "_not_helmet_",
+    ]
     # Classes que são ignoradas na exibição (usadas apenas para treinamento)
     IGNORED_CLASSES = ["_head_", "_not_helmet_"]
 
@@ -23,23 +32,31 @@ class EPIDetector:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # type: ignore
         print(f"Inicializando detector no dispositivo: {self.device}")
 
-        # Modelo COCO para detectar pessoas
-        print("  - Carregando modelo COCO para detecção de pessoas...")
-        self.person_model = torchvision.models.detection.fasterrcnn_resnet50_fpn_v2(weights="DEFAULT")
-        self.person_model = self.person_model.to(self.device).eval()
-
-        # Modelo customizado para EPIs
+        # Modelo customizado para EPIs (agora inclui person)
         self.epi_model = None
+
+        # Load default weights structure first
+        # Note: We start with DEFAULT weights but replace the head, so we rely on loading our trained state_dict
+        self.epi_model = torchvision.models.detection.fasterrcnn_resnet50_fpn_v2(
+            weights="DEFAULT"
+        )
+        in_features = self.epi_model.roi_heads.box_predictor.cls_score.in_features  # type: ignore
+        self.epi_model.roi_heads.box_predictor = FastRCNNPredictor(
+            in_features, len(self.EPI_CLASSES)
+        )
+
         if epi_model_path:
             print(f"  - Carregando modelo EPI de: {epi_model_path}")
-            self.epi_model = torchvision.models.detection.fasterrcnn_resnet50_fpn_v2(weights="DEFAULT")
-            in_features = self.epi_model.roi_heads.box_predictor.cls_score.in_features  # type: ignore
-            self.epi_model.roi_heads.box_predictor = FastRCNNPredictor(in_features, len(self.EPI_CLASSES))
-
-            state_dict = torch.load(epi_model_path, map_location=self.device, weights_only=True)
+            state_dict = torch.load(
+                epi_model_path, map_location=self.device, weights_only=True
+            )
             self.epi_model.load_state_dict(state_dict)
-            self.epi_model = self.epi_model.to(self.device).eval()
+        else:
+            print(
+                "  - AVISO: Nenhum modelo customizado fornecido. Usando pesos aleatórios para head."
+            )
 
+        self.epi_model = self.epi_model.to(self.device).eval()
         print("Detector inicializado com sucesso!")
 
     def detect(self, frame: np.ndarray) -> tuple[list[tuple], list[dict]]:
@@ -58,44 +75,35 @@ class EPIDetector:
         img_tensor = F.to_tensor(frame).unsqueeze(0).to(self.device)
 
         with torch.no_grad():
-            person_predictions = self.person_model(img_tensor)[0]
-            epi_predictions = self.epi_model(img_tensor)[0] if self.epi_model else None
+            predictions = self.epi_model(img_tensor)[0]
 
-        # Combinar detecções
-        results = self._combine_predictions(person_predictions, epi_predictions)
+        # Processar detecções
+        results = self._process_predictions(predictions)
 
         # Verificar uso de EPIs
         epi_status = self._check_epi_usage(results)
 
         return results, epi_status
 
-    def _combine_predictions(self, person_predictions, epi_predictions) -> list[tuple]:
-        """Combina predições dos dois modelos."""
-        combined = []
+    def _process_predictions(self, predictions) -> list[tuple]:
+        """Processa predições do modelo único."""
+        processed = []
 
-        # Pessoas do modelo COCO
-        if person_predictions:
-            for i, score in enumerate(person_predictions["scores"].tolist()):
+        if predictions:
+            for i, score in enumerate(predictions["scores"].tolist()):
                 if score > CONFIDENCE_THRESHOLD:
-                    label_id = person_predictions["labels"][i].item()
-                    if label_id == 1:  # person no COCO
-                        box = person_predictions["boxes"][i].cpu().numpy().astype(int)
-                        combined.append((box, "person", score))
-
-        # EPIs do modelo customizado
-        if epi_predictions:
-            for i, score in enumerate(epi_predictions["scores"].tolist()):
-                if score > CONFIDENCE_THRESHOLD:
-                    label_id = epi_predictions["labels"][i].item()
+                    label_id = predictions["labels"][i].item()
                     if 0 < label_id < len(self.EPI_CLASSES):
                         label = self.EPI_CLASSES[label_id]
+
                         # Ignora classes de referência negativa
                         if label in self.IGNORED_CLASSES:
                             continue
-                        box = epi_predictions["boxes"][i].cpu().numpy().astype(int)
-                        combined.append((box, label, score))
 
-        return combined
+                        box = predictions["boxes"][i].cpu().numpy().astype(int)
+                        processed.append((box, label, score))
+
+        return processed
 
     def _calculate_overlap(self, person_box, epi_box) -> float:
         """
@@ -147,13 +155,31 @@ class EPIDetector:
         # Luvas podem estar em qualquer lugar (mãos se movem muito)
         return True
 
-    def _check_epi_usage(self, results: list[tuple], threshold: float = 0.1) -> list[dict]:
+    def _check_epi_usage(
+        self, results: list[tuple], threshold: float = 0.1
+    ) -> list[dict]:
         """Verifica uso de EPIs por pessoa."""
-        persons = [(box, idx) for idx, (box, label, _) in enumerate(results) if label == "person"]
+        persons = [
+            (box, idx)
+            for idx, (box, label, _) in enumerate(results)
+            if label == "person"
+        ]
         epis = {
-            "helmet": [(box, idx) for idx, (box, label, _) in enumerate(results) if label == "helmet"],
-            "vest": [(box, idx) for idx, (box, label, _) in enumerate(results) if label == "vest"],
-            "gloves": [(box, idx) for idx, (box, label, _) in enumerate(results) if label == "gloves"],
+            "helmet": [
+                (box, idx)
+                for idx, (box, label, _) in enumerate(results)
+                if label == "helmet"
+            ],
+            "vest": [
+                (box, idx)
+                for idx, (box, label, _) in enumerate(results)
+                if label == "vest"
+            ],
+            "gloves": [
+                (box, idx)
+                for idx, (box, label, _) in enumerate(results)
+                if label == "gloves"
+            ],
         }
 
         person_epi_status = []
@@ -173,7 +199,9 @@ class EPIDetector:
                     overlap = self._calculate_overlap(person_box, epi_box)
                     if overlap > threshold:
                         # Verifica se faz sentido anatomicamente
-                        if self._validate_anatomical_position(person_box, epi_box, epi_type):
+                        if self._validate_anatomical_position(
+                            person_box, epi_box, epi_type
+                        ):
                             status[epi_type] = True
                             break
 
