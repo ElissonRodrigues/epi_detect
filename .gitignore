@@ -28,6 +28,9 @@ env/
 
 dataset/
 
+*.zip
+
+*.db
 
 # IDE
 .idea/
